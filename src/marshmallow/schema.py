@@ -1,6 +1,7 @@
 """The :class:`Schema` class, including its metaclass and options (class Meta)."""
 from collections import defaultdict, OrderedDict
 from collections.abc import Mapping
+from functools import lru_cache
 import datetime as dt
 import uuid
 import decimal
@@ -401,13 +402,18 @@ class BaseSchema(base.SchemaABC):
 
     ##### Override-able methods #####
 
-    def handle_error(self, error, data):
+    def handle_error(self, error, data, *, many, **kwargs):
         """Custom error handler function for the schema.
 
         :param ValidationError error: The `ValidationError` raised during (de)serialization.
         :param data: The original input data.
+        :param bool many: Value of ``many`` on dump or load.
+        :param bool partial: Value of ``partial`` on load.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.0.0rc9
+            Receives `many` and `partial` (on deserialization) as keyword arguments.
         """
         pass
 
@@ -436,11 +442,11 @@ class BaseSchema(base.SchemaABC):
         """
         try:
             value = getter_func(data)
-        except ValidationError as err:
-            error_store.store_error(err.messages, field_name, index=index)
+        except ValidationError as error:
+            error_store.store_error(error.messages, field_name, index=index)
             # When a Nested field fails validation, the marshalled data is stored
             # on the ValidationError's valid_data attribute
-            return err.valid_data or missing
+            return error.valid_data or missing
         return value
 
     def _serialize(
@@ -492,7 +498,7 @@ class BaseSchema(base.SchemaABC):
             ]
             self._pending = False
             return ret
-        items = []
+        ret = self.dict_class()
         for attr_name, field_obj in fields_dict.items():
             if getattr(field_obj, "load_only", False):
                 continue
@@ -507,8 +513,7 @@ class BaseSchema(base.SchemaABC):
             )
             if value is missing:
                 continue
-            items.append((key, value))
-        ret = dict_class(items)
+            ret[key] = value
         return ret
 
     def dump(self, obj, *, many=None):
@@ -566,7 +571,7 @@ class BaseSchema(base.SchemaABC):
         if errors:
             exc = ValidationError(errors, data=obj, valid_data=result)
             # User-defined error handler
-            self.handle_error(exc, obj)
+            self.handle_error(exc, obj, many=many)
             raise exc
 
         return result
@@ -890,7 +895,7 @@ class BaseSchema(base.SchemaABC):
                     errors = err.normalized_messages()
         if errors:
             exc = ValidationError(errors, data=data, valid_data=result)
-            self.handle_error(exc, data)
+            self.handle_error(exc, data, many=many, partial=partial)
             raise exc
 
         return result
@@ -1030,6 +1035,7 @@ class BaseSchema(base.SchemaABC):
                 )
                 raise TypeError(msg) from exc
 
+    @lru_cache(maxsize=8)
     def _has_processors(self, tag):
         return self._hooks[(tag, True)] or self._hooks[(tag, False)]
 

@@ -1,8 +1,37 @@
 Changelog
 ---------
 
-3.0.0 (unreleased)
-++++++++++++++++++
+3.0.0rc9 (unreleased)
++++++++++++++++++++++
+
+Features:
+
+- *Backwards-incompatible*: ``DateTime`` does not affect timezone information
+  on serialization and deserialization (:issue:`1234`, :pr:`1287`).
+- Add ``NaiveDateTime`` and ``AwareDateTime`` to enforce timezone awareness
+  (:issue:`1234`, :pr:`1287`).
+- *Backwards-incompatible*: ``List`` does not wrap single values in a list on
+  serialization (:pr:`1307`).
+- *Backwards-incompatible*: ``Schema.handle_error`` receives ``many`` and ``partial`` as keyword arguments (:pr:`1321`).
+- Use `raise from` more uniformly to improve stack traces (:pr:`1313`).
+- Rename ``Nested.__schema`` to ``Nested._schema`` to prevent name mangling (:issue:`1289`).
+- Performance improvements (:pr:`1309`).
+
+Deprecations/Removals:
+
+- ``LocalDateTime`` is removed (:issue:`1234`).
+- ``marshmallow.utils.utc`` is removed. Use ``datetime.timezone.utc`` instead.
+
+Bug fixes:
+
+- Fix behavior of `List(Nested("self"))` (`#779 (comment) <https://github.com/marshmallow-code/marshmallow/issues/779#issuecomment-396354987>`_).
+
+Support:
+
+- Document usage of  `validate.Regexp`'s usage `re.search` (:issue:`1285`). Thanks :user:`macdonaldezra`.
+
+3.0.0rc8 (2019-07-04)
++++++++++++++++++++++
 
 Features:
 
@@ -10,12 +39,19 @@ Features:
   within ``List`` and ``Dict`` (:issue:`779`, :issue:`946`).
 - Use ``email.utils.parsedate_to_datetime`` instead of conditionally
   using dateutil for parsing RFC dates (:pr:`1246`).
+- Use internal util functions instead of conditionally using dateutil
+  for parsing  ISO 8601 datetimes, dates and times. Timezone info is now
+  correctly deserialized whether or not dateutil is installed. (:pr:`1265`)
 - Improve error messages for ``validate.Range``.
 - Use ``raise from exc`` for better stack traces (:pr:`1254`). Thanks
   :user:`fuhrysteve`.
+- python-dateutil is no longer used. This resolves the inconsistent behavior
+  based on the presence of python-dateutil (:issue:`497`, :issue:`1234`).
 
 Bug fixes:
 
+- Fix method resolution for ``__init__`` method of ``fields.Email`` and
+  ``fields.URL`` (:issue:`1268`). Thanks :user:`dursk` for the catch and patch.
 - Includes bug fixes from 2.19.4 and 2.19.5.
 
 Other changes:
@@ -23,6 +59,7 @@ Other changes:
 - *Backwards-incompatible*: Rename ``fields.List.container`` to ``fields.List.inner``,
   ``fields.Dict.key_container`` to ``fields.Dict.key_field``, and
   ``fields.Dict.value_container`` to ``fields.Dict.value_field``.
+- Switch to Azure Pipelines for CI (:issue:`1261`).
 
 3.0.0rc7 (2019-06-15)
 +++++++++++++++++++++

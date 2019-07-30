@@ -3,6 +3,7 @@
 import datetime as dt
 import decimal
 import random
+import math
 from collections import namedtuple, OrderedDict
 
 import simplejson as json
@@ -22,7 +23,6 @@ from marshmallow import (
 from marshmallow.exceptions import ValidationError, StringNotCollectionError
 
 from tests.base import (
-    assert_almost_equal,
     UserSchema,
     UserMetaSchema,
     UserRelativeUrlSchema,
@@ -50,7 +50,7 @@ def test_serializing_basic_object(SchemaClass, user):
     s = SchemaClass()
     data = s.dump(user)
     assert data["name"] == user.name
-    assert_almost_equal(data["age"], 42.3)
+    assert math.isclose(data["age"], 42.3)
     assert data["registered"]
 
 
@@ -427,7 +427,7 @@ def test_loads_deserializes_from_json():
     result = UserSchema().loads(user_json)
     assert isinstance(result, User)
     assert result.name == "Monty"
-    assert_almost_equal(result.age, 42.3)
+    assert math.isclose(result.age, 42.3)
 
 
 def test_serializing_none():
@@ -569,11 +569,6 @@ def test_tz_datetime_field(user, serialized_user):
     assert serialized_user["updated"] == expected
 
 
-def test_local_datetime_field(user, serialized_user):
-    expected = utils.isoformat(user.updated, localtime=True)
-    assert serialized_user["updated_local"] == expected
-
-
 def test_class_variable(serialized_user):
     assert serialized_user["species"] == "Homo sapiens"
 
@@ -649,7 +644,7 @@ def test_as_string():
     u = User("John", age=42.3)
     serialized = UserFloatStringSchema().dump(u)
     assert type(serialized["age"]) == str
-    assert_almost_equal(float(serialized["age"]), 42.3)
+    assert math.isclose(float(serialized["age"]), 42.3)
 
 
 @pytest.mark.parametrize("SchemaClass", [UserSchema, UserMetaSchema])
@@ -667,9 +662,8 @@ def test_fields_must_be_declared_as_instances(user):
     class BadUserSchema(Schema):
         name = fields.String
 
-    with pytest.raises(TypeError) as excinfo:
+    with pytest.raises(TypeError, match="must be declared as a Field instance"):
         BadUserSchema().dump(user)
-    assert "must be declared as a Field instance" in str(excinfo)
 
 
 @pytest.mark.parametrize("SchemaClass", [UserSchema, UserMetaSchema])
@@ -1537,9 +1531,9 @@ def test_invalid_only_and_exclude_with_fields():
     with pytest.raises(ValueError) as excinfo:
         MySchema(only=("foo", "par"), exclude=("ban",))
 
-    assert "foo" in str(excinfo)
-    assert "par" in str(excinfo)
-    assert "ban" in str(excinfo)
+    assert "foo" in str(excinfo.value)
+    assert "par" in str(excinfo.value)
+    assert "ban" in str(excinfo.value)
 
 
 def test_only_and_exclude_with_additional():
@@ -1566,9 +1560,9 @@ def test_invalid_only_and_exclude_with_additional():
     with pytest.raises(ValueError) as excinfo:
         MySchema(only=("foop", "par"), exclude=("ban",))
 
-    assert "foop" in str(excinfo)
-    assert "par" in str(excinfo)
-    assert "ban" in str(excinfo)
+    assert "foop" in str(excinfo.value)
+    assert "par" in str(excinfo.value)
+    assert "ban" in str(excinfo.value)
 
 
 def test_exclude_invalid_attribute():
@@ -1637,7 +1631,6 @@ def test_meta_serializer_fields():
     assert result["uppername"] == "JOHN"
     assert result["is_old"] is False
     assert result["created"] == utils.isoformat(u.created)
-    assert result["updated_local"] == utils.isoformat(u.updated, localtime=True)
     assert result["finger_count"] == 10
     assert result["various_data"] == dict(u.various_data)
 
@@ -1646,7 +1639,6 @@ def test_meta_fields_mapping(user):
     s = UserMetaSchema()
     s.dump(user)  # need to call dump to update fields
     assert type(s.fields["balance"]) == fields.Decimal
-    assert type(s.fields["updated_local"]) == fields.LocalDateTime
     # Inferred fields
     assert type(s.fields["name"]._field_cache[fields.String]) == fields.String
     assert type(s.fields["created"]._field_cache[fields.DateTime]) == fields.DateTime
@@ -1797,7 +1789,7 @@ class MySchema(Schema):
     email = fields.Email()
     age = fields.Integer()
 
-    def handle_error(self, errors, obj):
+    def handle_error(self, errors, obj, **kwargs):
         raise CustomError("Something bad happened")
 
 
@@ -1813,7 +1805,7 @@ class TestHandleError:
         class MySchema3(Schema):
             email = fields.Email()
 
-            def handle_error(self, error, data):
+            def handle_error(self, error, data, **kwargs):
                 assert type(error) is ValidationError
                 assert "email" in error.messages
                 assert list(error.messages.keys()) == ["email"]
@@ -1830,7 +1822,7 @@ class TestHandleError:
             email = fields.Email()
             url = fields.URL()
 
-            def handle_error(self, error, data):
+            def handle_error(self, error, data, **kwargs):
                 assert type(error) is ValidationError
                 assert "email" in error.messages
                 assert list(error.messages.keys()) == ["email"]
@@ -1851,7 +1843,7 @@ class TestHandleError:
                 if value < 0:
                     raise ValidationError("Must be greater than 0.")
 
-            def handle_error(self, error, data):
+            def handle_error(self, error, data, **kwargs):
                 assert type(error) is ValidationError
                 assert "num" in error.messages
                 assert list(error.messages.keys()) == ["num"]
@@ -1871,7 +1863,7 @@ class TestHandleError:
             def validates_schema(self, data, **kwargs):
                 raise ValidationError("Invalid schema!")
 
-            def handle_error(self, error, data):
+            def handle_error(self, error, data, **kwargs):
                 assert type(error) is ValidationError
                 assert list(error.messages.keys()) == ["_schema"]
                 assert data == in_data
@@ -2034,11 +2026,10 @@ class TestNestedSchema:
         serialized_user = user_serializer.dump(user)
         assert serialized_blog["user"] == serialized_user
 
-        with pytest.raises(ValidationError) as excinfo:
+        with pytest.raises(ValidationError, match="email"):
             BlogSchema().load(
                 {"title": "Monty's blog", "user": {"name": "Monty", "email": "foo"}}
             )
-        assert "email" in str(excinfo)
 
     def test_nested_many_fields(self, blog):
         serialized_blog = BlogSchema().dump(blog)
@@ -2105,9 +2096,8 @@ class TestNestedSchema:
 
     def test_nested_dump(self, blog):
         blog.user.age = "foo"
-        with pytest.raises(ValidationError) as excinfo:
+        with pytest.raises(ValidationError, match="age"):
             BlogSchema().dump(blog)
-        assert "age" in str(excinfo)
 
     def test_nested_method_field(self, blog):
         data = BlogSchema().dump(blog)
@@ -2362,7 +2352,7 @@ class TestSelfReference:
         relative = data["rels"][0]
         assert relative == user.relatives[0].name
 
-    def test_nested_many(self):
+    def test_nested_self_many(self):
         class SelfManySchema(Schema):
             relatives = fields.Nested("self", many=True)
 
@@ -2372,6 +2362,21 @@ class TestSelfReference:
         person = User(name="Foo")
         person.relatives = [User(name="Bar", age=12), User(name="Baz", age=34)]
         data = SelfManySchema().dump(person)
+        assert data["name"] == person.name
+        assert len(data["relatives"]) == len(person.relatives)
+        assert data["relatives"][0]["name"] == person.relatives[0].name
+        assert data["relatives"][0]["age"] == person.relatives[0].age
+
+    def test_nested_self_list(self):
+        class SelfListSchema(Schema):
+            relatives = fields.List(fields.Nested("self"))
+
+            class Meta:
+                additional = ("name", "age")
+
+        person = User(name="Foo")
+        person.relatives = [User(name="Bar", age=12), User(name="Baz", age=34)]
+        data = SelfListSchema().dump(person)
         assert data["name"] == person.name
         assert len(data["relatives"]) == len(person.relatives)
         assert data["relatives"][0]["name"] == person.relatives[0].name
@@ -2464,10 +2469,9 @@ class TestContext:
         serializer = UserFunctionContextSchema()
         # no context
         serializer.context = None
-        with pytest.raises(ValidationError) as excinfo:
-            serializer.dump(owner)
         msg = "No context available for Function field {!r}".format("is_collab")
-        assert msg in str(excinfo)
+        with pytest.raises(ValidationError, match=msg):
+            serializer.dump(owner)
 
     def test_function_field_handles_bound_serializer(self):
         class SerializeA:

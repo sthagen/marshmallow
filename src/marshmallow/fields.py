@@ -72,10 +72,15 @@ class Field(FieldABC):
     :param default: If set, this value will be used during serialization if the input value
         is missing. If not set, the field will be excluded from the serialized output if the
         input value is missing. May be a value or a callable.
+    :param missing: Default deserialization value for the field if the field is not
+        found in the input data. May be a value or a callable.
+    :param str data_key: The name of the output key in the output of `load` and `dump`.
+        If `None`, the key will match the name of the field.
     :param str attribute: The name of the attribute to get the value from when serializing.
         If `None`, assumes the attribute has the same name as the field.
-    :param str data_key: The name of the key to get the value from when deserializing.
-        If `None`, assumes the key has the same name as the field.
+        Note: This should only be used for very specific use cases such as
+        outputting multiple fields for a single attribute. In most cases,
+        you should use ``data_key`` instead.
     :param callable validate: Validator or collection of validators that are called
         during deserialization. Validator takes a field's input value as
         its only parameter and returns a boolean.
@@ -90,8 +95,6 @@ class Field(FieldABC):
     :param bool dump_only: If `True` skip this field during deserialization, otherwise
         its value will be present in the deserialized object. In the context of an
         HTTP API, this effectively marks the field as "read-only".
-    :param missing: Default deserialization value for the field if the field is not
-        found in the input data. May be a value or a callable.
     :param dict error_messages: Overrides for `Field.default_error_messages`.
     :param metadata: Extra arguments to be stored as metadata.
 
@@ -138,14 +141,14 @@ class Field(FieldABC):
         self,
         *,
         default=missing_,
-        attribute=None,
+        missing=missing_,
         data_key=None,
+        attribute=None,
         validate=None,
         required=False,
         allow_none=None,
         load_only=False,
         dump_only=False,
-        missing=missing_,
         error_messages=None,
         **metadata
     ):
@@ -205,10 +208,13 @@ class Field(FieldABC):
             )
         )
 
+    def __deepcopy__(self, memo):
+        return copy.copy(self)
+
     def get_value(self, obj, attr, accessor=None, default=missing_):
         """Return the value for a given key from an object.
 
-        :param object obj: The object to get the value from
+        :param object obj: The object to get the value from.
         :param str attr: The attribute/key in `obj` to get the value from.
         :param callable accessor: A callable used to retrieve the value of `attr` from
             the object `obj`. Defaults to `marshmallow.utils.get_value`.
@@ -272,11 +278,10 @@ class Field(FieldABC):
         """Pulls the value for the given key from the object, applies the
         field's formatting and returns the result.
 
-        :param str attr: The attribute or key to get from the object.
-        :param str obj: The object to pull the key from.
-        :param callable accessor: Function used to pull values from ``obj``.
-        :param dict kwargs': Field-specific keyword arguments.
-        :raise ValidationError: In case of formatting problem
+        :param str attr: The attribute/key to get from the object.
+        :param str obj: The object to access the attribute/key from.
+        :param callable accessor: Function used to access values from ``obj``.
+        :param dict kwargs: Field-specific keyword arguments.
         """
         if self._CHECK_ATTRIBUTE:
             value = self.get_value(obj, attr, accessor=accessor)
@@ -292,10 +297,10 @@ class Field(FieldABC):
     def deserialize(self, value, attr=None, data=None, **kwargs):
         """Deserialize ``value``.
 
-        :param value: The value to be deserialized.
-        :param str attr: The attribute/key in `data` to be deserialized.
-        :param dict data: The raw input data passed to the `Schema.load`.
-        :param dict kwargs': Field-specific keyword arguments.
+        :param value: The value to deserialize.
+        :param str attr: The attribute/key in `data` to deserialize.
+        :param dict data: The raw input data passed to `Schema.load`.
+        :param dict kwargs: Field-specific keyword arguments.
         :raise ValidationError: If an invalid value is passed or if a required value
             is missing.
         """
@@ -315,7 +320,7 @@ class Field(FieldABC):
 
     def _bind_to_schema(self, field_name, schema):
         """Update field with values from its parent schema. Called by
-            :meth:`_bind_field<marshmallow.Schema._bind_field>`.
+        :meth:`Schema._bind_field <marshmallow.Schema._bind_field>`.
 
         :param str field_name: Field name set in schema.
         :param Schema schema: Parent schema.
@@ -338,8 +343,7 @@ class Field(FieldABC):
         :param value: The value to be serialized.
         :param str attr: The attribute or key on the object to be serialized.
         :param object obj: The object the value was pulled from.
-        :param dict kwargs': Field-specific keyword arguments.
-        :raise ValidationError: In case of formatting or validation failure.
+        :param dict kwargs: Field-specific keyword arguments.
         :return: The serialized value
         """
         return value
@@ -350,15 +354,15 @@ class Field(FieldABC):
         :param value: The value to be deserialized.
         :param str attr: The attribute/key in `data` to be deserialized.
         :param dict data: The raw input data passed to the `Schema.load`.
-        :param dict kwargs': Field-specific keyword arguments.
+        :param dict kwargs: Field-specific keyword arguments.
         :raise ValidationError: In case of formatting or validation failure.
         :return: The deserialized value.
 
-        .. versionchanged:: 3.0.0
-            Add ``**kwargs`` parameters
-
         .. versionchanged:: 2.0.0
             Added ``attr`` and ``data`` parameters.
+
+        .. versionchanged:: 3.0.0
+            Added ``**kwargs`` to signature.
         """
         return value
 
@@ -446,7 +450,7 @@ class Nested(Field):
         """The nested Schema object.
 
         .. versionchanged:: 1.0.0
-            Renamed from `serializer` to `schema`
+            Renamed from `serializer` to `schema`.
         """
         if not self._schema:
             # Inherit context from parent.
@@ -487,43 +491,41 @@ class Nested(Field):
             if field.startswith(nested_field)
         ]
 
-    def _serialize(self, nested_obj, attr, obj, **kwargs):
+    def _serialize(self, nested_obj, attr, obj, many=False, **kwargs):
         # Load up the schema first. This allows a RegistryError to be raised
         # if an invalid schema name was passed
         schema = self.schema
         if nested_obj is None:
             return None
-        try:
-            return schema.dump(nested_obj, many=self.many)
-        except ValidationError as error:
-            raise ValidationError(
-                error.messages, valid_data=error.valid_data
-            ) from error
+        return schema.dump(nested_obj, many=self.many or many)
 
-    def _test_collection(self, value):
-        if self.many and not utils.is_collection(value):
+    def _test_collection(self, value, many=False):
+        many = self.many or many
+        if many and not utils.is_collection(value):
             self.fail("type", input=value, type=value.__class__.__name__)
 
-    def _load(self, value, data, partial=None):
+    def _load(self, value, data, partial=None, many=False):
         try:
-            valid_data = self.schema.load(value, unknown=self.unknown, partial=partial)
+            valid_data = self.schema.load(
+                value, unknown=self.unknown, partial=partial, many=self.many or many
+            )
         except ValidationError as error:
             raise ValidationError(
                 error.messages, valid_data=error.valid_data
             ) from error
         return valid_data
 
-    def _deserialize(self, value, attr, data, partial=None, **kwargs):
+    def _deserialize(self, value, attr, data, partial=None, many=False, **kwargs):
         """Same as :meth:`Field._deserialize` with additional ``partial`` argument.
 
         :param bool|tuple partial: For nested schemas, the ``partial``
             parameter passed to `Schema.load`.
 
         .. versionchanged:: 3.0.0
-            Add ``partial`` parameter
+            Add ``partial`` parameter.
         """
-        self._test_collection(value)
-        return self._load(value, data, partial=partial)
+        self._test_collection(value, many=many)
+        return self._load(value, data, partial=partial, many=many)
 
 
 class Pluck(Nested):
@@ -592,6 +594,9 @@ class List(Field):
     .. versionchanged:: 2.0.0
         The ``allow_none`` parameter now applies to deserialization and
         has the same semantics as the other fields.
+
+    .. versionchanged:: 3.0.0rc9
+        Does not serialize scalar values to single-item lists.
     """
 
     default_error_messages = {"invalid": "Not a valid list."}
@@ -620,11 +625,17 @@ class List(Field):
     def _serialize(self, value, attr, obj, **kwargs):
         if value is None:
             return None
+        # Optimize dumping a list of Nested objects by calling dump(many=True)
+        if isinstance(self.inner, Nested) and not self.inner.many:
+            return self.inner._serialize(value, attr, obj, many=True, **kwargs)
         return [self.inner._serialize(each, attr, obj, **kwargs) for each in value]
 
     def _deserialize(self, value, attr, data, **kwargs):
         if not utils.is_collection(value):
             self.fail("invalid")
+        # Optimize loading a list of Nested objects by calling load(many=True)
+        if isinstance(self.inner, Nested) and not self.inner.many:
+            return self.inner.deserialize(value, many=True, **kwargs)
 
         result = []
         errors = {}
@@ -794,15 +805,15 @@ class Number(Field):
 
     def _format_num(self, value):
         """Return the number value for value, given this field's `num_type`."""
-        # (value is True or value is False) is ~5x faster than isinstance(value, bool)
-        if value is True or value is False:
-            raise TypeError("value must be a Number, not a boolean.")
         return self.num_type(value)
 
     def _validated(self, value):
         """Format the value or raise a :exc:`ValidationError` if an error occurs."""
         if value is None:
             return None
+        # (value is True or value is False) is ~5x faster than isinstance(value, bool)
+        if value is True or value is False:
+            self.fail("invalid", input=value)
         try:
             return self._format_num(value)
         except (TypeError, ValueError) as error:
@@ -815,12 +826,10 @@ class Number(Field):
 
     def _serialize(self, value, attr, obj, **kwargs):
         """Return a string if `self.as_string=True`, otherwise return this field's `num_type`."""
-        ret = self._validated(value)
-        return (
-            self._to_string(ret)
-            if (self.as_string and ret not in (None, missing_))
-            else ret
-        )
+        if value is None:
+            return None
+        ret = self._format_num(value)
+        return self._to_string(ret) if self.as_string else ret
 
     def _deserialize(self, value, attr, data, **kwargs):
         return self._validated(value)
@@ -835,25 +844,23 @@ class Integer(Number):
     num_type = int
     default_error_messages = {"invalid": "Not a valid integer."}
 
-    # override Number
     def __init__(self, *, strict=False, **kwargs):
         self.strict = strict
         super().__init__(**kwargs)
 
     # override Number
-    def _format_num(self, value):
+    def _validated(self, value):
         if self.strict:
             if isinstance(value, numbers.Number) and isinstance(
                 value, numbers.Integral
             ):
-                return super()._format_num(value)
+                return super()._validated(value)
             self.fail("invalid", input=value)
-        return super()._format_num(value)
+        return super()._validated(value)
 
 
 class Float(Number):
-    """
-    A double as IEEE-754 double precision string.
+    """A double as an IEEE-754 double precision string.
 
     :param bool allow_nan: If `True`, `NaN`, `Infinity` and `-Infinity` are allowed,
         even though they are illegal according to the JSON specification.
@@ -870,8 +877,8 @@ class Float(Number):
         self.allow_nan = allow_nan
         super().__init__(as_string=as_string, **kwargs)
 
-    def _format_num(self, value):
-        num = super()._format_num(value)
+    def _validated(self, value):
+        num = super()._validated(value)
         if self.allow_nan is False:
             if math.isnan(num) or num == float("inf") or num == float("-inf"):
                 self.fail("special")
@@ -934,25 +941,22 @@ class Decimal(Number):
     # override Number
     def _format_num(self, value):
         num = decimal.Decimal(str(value))
-
         if self.allow_nan:
             if num.is_nan():
                 return decimal.Decimal("NaN")  # avoid sNaN, -sNaN and -NaN
-        else:
-            if num.is_nan() or num.is_infinite():
-                self.fail("special")
-
         if self.places is not None and num.is_finite():
             num = num.quantize(self.places, rounding=self.rounding)
-
         return num
 
     # override Number
     def _validated(self, value):
         try:
-            return super()._validated(value)
+            num = super()._validated(value)
         except decimal.InvalidOperation as error:
             raise self.make_error("invalid") from error
+        if not self.allow_nan and (num.is_nan() or num.is_infinite()):
+            raise self.make_error("special")
+        return num
 
     # override Number
     def _to_string(self, value):
@@ -1039,8 +1043,8 @@ class Boolean(Field):
                     return True
                 elif value in self.falsy:
                     return False
-            except TypeError:
-                pass
+            except TypeError as error:
+                raise self.make_error("invalid", input=value) from error
         self.fail("invalid", input=value)
 
 
@@ -1052,6 +1056,9 @@ class DateTime(Field):
     :param str format: Either ``"rfc"`` (for RFC822), ``"iso"`` (for ISO8601),
         or a date format string. If `None`, defaults to "iso".
     :param kwargs: The same keyword arguments that :class:`Field` receives.
+
+    .. versionchanged:: 3.0.0rc9
+        Does not modify timezone information on (de)serialization.
     """
 
     SERIALIZATION_FUNCS = {
@@ -1083,7 +1090,7 @@ class DateTime(Field):
     def __init__(self, format=None, **kwargs):
         super().__init__(**kwargs)
         # Allow this to be None. It may be set later in the ``_serialize``
-        # or ``_deserialize`` methods This allows a Schema to dynamically set the
+        # or ``_deserialize`` methods. This allows a Schema to dynamically set the
         # format, e.g. from a Meta option
         self.format = format
 
@@ -1101,12 +1108,7 @@ class DateTime(Field):
         data_format = self.format or self.DEFAULT_FORMAT
         format_func = self.SERIALIZATION_FUNCS.get(data_format)
         if format_func:
-            try:
-                return format_func(value)
-            except (TypeError, AttributeError, ValueError) as error:
-                raise self.make_error(
-                    "format", input=value, obj_type=self.OBJ_TYPE
-                ) from error
+            return format_func(value)
         else:
             return value.strftime(data_format)
 
@@ -1144,6 +1146,8 @@ class NaiveDateTime(DateTime):
         converted to this timezone before their timezone information is
         removed.
     :param kwargs: The same keyword arguments that :class:`Field` receives.
+
+    .. versionadded:: 3.0.0rc9
     """
 
     AWARENESS = "naive"
@@ -1173,6 +1177,8 @@ class AwareDateTime(DateTime):
         datetimes are rejected. If not `None`, naive datetimes are set this
         timezone.
     :param kwargs: The same keyword arguments that :class:`Field` receives.
+
+    .. versionadded:: 3.0.0rc9
     """
 
     AWARENESS = "aware"
@@ -1208,10 +1214,7 @@ class Time(Field):
     def _serialize(self, value, attr, obj, **kwargs):
         if value is None:
             return None
-        try:
-            ret = value.isoformat()
-        except AttributeError as error:
-            raise self.make_error("format", input=value) from error
+        ret = value.isoformat()
         if value.microsecond:
             return ret[:15]
         return ret
@@ -1306,11 +1309,8 @@ class TimeDelta(Field):
     def _serialize(self, value, attr, obj, **kwargs):
         if value is None:
             return None
-        try:
-            base_unit = dt.timedelta(**{self.precision: 1})
-            return int(value.total_seconds() / base_unit.total_seconds())
-        except AttributeError as error:
-            raise self.make_error("format", input=value) from error
+        base_unit = dt.timedelta(**{self.precision: 1})
+        return int(value.total_seconds() / base_unit.total_seconds())
 
     def _deserialize(self, value, attr, data, **kwargs):
         try:
@@ -1387,8 +1387,6 @@ class Mapping(Field):
             return None
         if not self.value_field and not self.key_field:
             return value
-        if not isinstance(value, _Mapping):
-            self.fail("invalid")
 
         #  Serialize keys
         if self.key_field is None:
@@ -1531,9 +1529,11 @@ class Method(Field):
 
     .. versionchanged:: 2.0.0
         Removed optional ``context`` parameter on methods. Use ``self.context`` instead.
+
     .. versionchanged:: 2.3.0
         Deprecated ``method_name`` parameter in favor of ``serialize`` and allow
         ``serialize`` to not be passed at all.
+
     .. versionchanged:: 3.0.0
         Removed ``method_name`` parameter.
     """
@@ -1584,6 +1584,7 @@ class Function(Field):
 
     .. versionchanged:: 2.3.0
         Deprecated ``func`` parameter in favor of ``serialize``.
+
     .. versionchanged:: 3.0.0a1
         Removed ``func`` parameter.
     """

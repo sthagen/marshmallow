@@ -1,11 +1,25 @@
 Changelog
 ---------
 
-3.0.0rc9 (unreleased)
+3.0.0 (unreleased)
+++++++++++++++++++
+
+Features:
+
+- Optimize ``List(Nested(...))`` (:issue:`779`).
+- Minor performance improvements and cleanup (:pr:`1328`).
+
+Support:
+
+- Various docs improvements (:pr:`1329`).
+
+3.0.0rc9 (2019-07-31)
 +++++++++++++++++++++
 
 Features:
 
+- *Backwards-incompatible*: Validation does not occur on serialization (:issue:`1132`).
+  This significantly improves serialization performance.
 - *Backwards-incompatible*: ``DateTime`` does not affect timezone information
   on serialization and deserialization (:issue:`1234`, :pr:`1287`).
 - Add ``NaiveDateTime`` and ``AwareDateTime`` to enforce timezone awareness
@@ -43,7 +57,7 @@ Features:
   for parsing  ISO 8601 datetimes, dates and times. Timezone info is now
   correctly deserialized whether or not dateutil is installed. (:pr:`1265`)
 - Improve error messages for ``validate.Range``.
-- Use ``raise from exc`` for better stack traces (:pr:`1254`). Thanks
+- Use ``raise from error`` for better stack traces (:pr:`1254`). Thanks
   :user:`fuhrysteve`.
 - python-dateutil is no longer used. This resolves the inconsistent behavior
   based on the presence of python-dateutil (:issue:`497`, :issue:`1234`).

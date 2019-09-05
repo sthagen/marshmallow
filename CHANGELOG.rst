@@ -1,12 +1,21 @@
 Changelog
 ---------
 
-3.0.2 (unreleased)
+3.0.3 (2019-09-04)
 ++++++++++++++++++
 
 Bug fixes:
 
-- Fix incorrect ``super()`` call in ``SchemaMeta.__init__``.
+- Handle when ``data_key`` is an empty string (:issue:`1378`).
+  Thanks :user:`jtrakk` for reporting.
+
+3.0.2 (2019-09-04)
+++++++++++++++++++
+
+Bug fixes:
+
+- Includes bug fix from 2.20.3 (:pr:`1376`).
+- Fix incorrect ``super()`` call in ``SchemaMeta.__init__`` (:pr:`1362`).
 
 3.0.1 (2019-08-21)
 ++++++++++++++++++
@@ -607,6 +616,13 @@ Deprecation/Removals:
 - Remove ``__error_handler__``, ``__accessor__``, ``@Schema.error_handler``, and ``@Schema.accessor``. Override ``Schema.handle_error`` and ``Schema.get_attribute`` instead.
 - Remove ``func`` parameter of ``fields.Function``. Remove ``method_name`` parameter of ``fields.Method`` (issue:`325`). Use the ``serialize`` parameter instead.
 - Remove ``extra`` parameter from ``Schema``. Use a ``@post_dump`` method to add additional data.
+
+2.20.3 (2019-09-04)
+*******************
+
+Bug fixes:
+
+- Don't swallow ``TypeError`` exceptions raised by ``Field._bind_to_schema`` or ``Schema.on_bind_field`` (:pr:`1376`).
 
 2.20.2 (2019-08-20)
 *******************

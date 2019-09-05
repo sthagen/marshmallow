@@ -348,8 +348,6 @@ class BaseSchema(base.SchemaABC):
             usage is critical. Defaults to `True`.
         """
 
-        pass
-
     def __init__(
         self,
         *,
@@ -505,7 +503,7 @@ class BaseSchema(base.SchemaABC):
             value = field_obj.serialize(attr_name, obj, accessor=self.get_attribute)
             if value is missing:
                 continue
-            key = field_obj.data_key or attr_name
+            key = field_obj.data_key if field_obj.data_key is not None else attr_name
             ret[key] = value
         return ret
 
@@ -609,7 +607,9 @@ class BaseSchema(base.SchemaABC):
         else:
             partial_is_collection = is_collection(partial)
             for attr_name, field_obj in self.load_fields.items():
-                field_name = field_obj.data_key or attr_name
+                field_name = (
+                    field_obj.data_key if field_obj.data_key is not None else attr_name
+                )
                 raw_value = data.get(field_name, missing)
                 if raw_value is missing:
                     # Ignore missing field if we're allowed to.
@@ -643,7 +643,7 @@ class BaseSchema(base.SchemaABC):
                     set_value(ret, key, value)
             if unknown != EXCLUDE:
                 fields = {
-                    field_obj.data_key or field_name
+                    field_obj.data_key if field_obj.data_key is not None else field_name
                     for field_name, field_obj in self.load_fields.items()
                 }
                 for key in set(data) - fields:
@@ -914,9 +914,9 @@ class BaseSchema(base.SchemaABC):
             fields_dict[field_name] = field_obj
 
         dump_data_keys = [
-            obj.data_key or name
-            for name, obj in fields_dict.items()
-            if not obj.load_only
+            field_obj.data_key if field_obj.data_key is not None else name
+            for name, field_obj in fields_dict.items()
+            if not field_obj.load_only
         ]
         if len(dump_data_keys) != len(set(dump_data_keys)):
             data_keys_duplicates = {
@@ -961,13 +961,12 @@ class BaseSchema(base.SchemaABC):
         Also set field load_only and dump_only values if field_name was
         specified in ``class Meta``.
         """
+        if field_name in self.load_only:
+            field_obj.load_only = True
+        if field_name in self.dump_only:
+            field_obj.dump_only = True
         try:
-            if field_name in self.load_only:
-                field_obj.load_only = True
-            if field_name in self.dump_only:
-                field_obj.dump_only = True
             field_obj._bind_to_schema(field_name, self)
-            self.on_bind_field(field_name, field_obj)
         except TypeError as error:
             # field declared as a class, not an instance
             if isinstance(field_obj, type) and issubclass(field_obj, base.FieldABC):
@@ -977,6 +976,8 @@ class BaseSchema(base.SchemaABC):
                     'Did you mean "fields.{}()"?'.format(field_name, field_obj.__name__)
                 )
                 raise TypeError(msg) from error
+            raise error
+        self.on_bind_field(field_name, field_obj)
 
     @lru_cache(maxsize=8)
     def _has_processors(self, tag):
@@ -1030,6 +1031,9 @@ class BaseSchema(base.SchemaABC):
                     '"{}" field does not exist.'.format(field_name)
                 ) from error
 
+            data_key = (
+                field_obj.data_key if field_obj.data_key is not None else field_name
+            )
             if many:
                 for idx, item in enumerate(data):
                     try:
@@ -1040,7 +1044,7 @@ class BaseSchema(base.SchemaABC):
                         validated_value = self._call_and_store(
                             getter_func=validator,
                             data=value,
-                            field_name=field_obj.data_key or field_name,
+                            field_name=data_key,
                             error_store=error_store,
                             index=(idx if self.opts.index_errors else None),
                         )
@@ -1055,7 +1059,7 @@ class BaseSchema(base.SchemaABC):
                     validated_value = self._call_and_store(
                         getter_func=validator,
                         data=value,
-                        field_name=field_obj.data_key or field_name,
+                        field_name=data_key,
                         error_store=error_store,
                     )
                     if validated_value is missing:

@@ -126,7 +126,7 @@ class Field(FieldABC):
     _creation_index = 0  # Used for sorting
 
     #: Default error messages for various kinds of errors. The keys in this dictionary
-    #: are passed to `Field.fail`. The values are error messages passed to
+    #: are passed to `Field.make_error`. The values are error messages passed to
     #: :exc:`marshmallow.exceptions.ValidationError`.
     default_error_messages = {
         "required": "Missing data for required field.",
@@ -473,7 +473,10 @@ class Nested(Field):
                 # Respect only and exclude passed from parent and re-initialize fields
                 set_class = self._schema.set_class
                 if self.only is not None:
-                    original = self._schema.only
+                    if self._schema.only is not None:
+                        original = self._schema.only
+                    else:  # only=None -> all fields
+                        original = self._schema.fields.keys()
                     self._schema.only = set_class(self.only).intersection(original)
                 if self.exclude:
                     original = self._schema.exclude

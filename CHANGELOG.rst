@@ -1,6 +1,31 @@
 Changelog
 ---------
 
+3.2.0 (2019-09-17)
+++++++++++++++++++
+
+Features:
+
+- Add type annotations to ``marshmallow.schema`` and ``marshmallow.validate`` (:pr:`1407`, :issue:`663`).
+
+Bug fixes:
+
+- Fix compatibility with Python < 3.5.3 (:issue:`1409`). Thanks :user:`lukaszdudek-silvair` for reporting.
+
+Refactoring:
+
+- Remove unnecessary ``BaseSchema`` superclass (:pr:`1406`).
+
+3.1.1 (2019-09-16)
+++++++++++++++++++
+
+Bug fixes:
+
+- Restore inheritance hierarchy of ``Number`` fields (:pr:`1403`).
+  ``fields.Integer`` and ``fields.Decimal`` inherit from ``fields.Number``.
+- Fix bug that raised an uncaught error when a nested schema instance had an unpickleable object in its context (:issue:`1404`).
+  Thanks :user:`metheoryt` for reporting.
+
 3.1.0 (2019-09-15)
 ++++++++++++++++++
 

@@ -11,7 +11,7 @@ import typing
 import warnings
 from collections.abc import Mapping as _Mapping
 
-from marshmallow import validate, utils, class_registry
+from marshmallow import validate, utils, class_registry, types
 from marshmallow.base import FieldABC, SchemaABC
 from marshmallow.utils import (
     is_collection,
@@ -328,7 +328,7 @@ class Field(FieldABC):
         self,
         value: typing.Any,
         attr: str = None,
-        data: typing.Dict[str, typing.Any] = None,
+        data: typing.Mapping[str, typing.Any] = None,
         **kwargs
     ):
         """Deserialize ``value``.
@@ -388,7 +388,7 @@ class Field(FieldABC):
         self,
         value: typing.Any,
         attr: typing.Optional[str],
-        data: typing.Optional[typing.Dict[str, typing.Any]],
+        data: typing.Optional[typing.Mapping[str, typing.Any]],
         **kwargs
     ):
         """Deserialize value. Concrete :class:`Field` classes should implement this method.
@@ -471,11 +471,11 @@ class Nested(Field):
 
     def __init__(
         self,
-        nested: typing.Union[SchemaABC, typing.Type[SchemaABC], str],
+        nested: typing.Union[SchemaABC, type, str],
         *,
         default: typing.Any = missing_,
-        only: typing.Union[typing.Sequence, typing.Set] = None,
-        exclude: typing.Union[typing.Sequence, typing.Set] = tuple(),
+        only: types.StrSequenceOrSet = None,
+        exclude: types.StrSequenceOrSet = (),
         many: bool = False,
         unknown: str = None,
         **kwargs
@@ -506,7 +506,7 @@ class Nested(Field):
             # Inherit context from parent.
             context = getattr(self.parent, "context", {})
             if isinstance(self.nested, SchemaABC):
-                self._schema = copy.deepcopy(self.nested)
+                self._schema = copy.copy(self.nested)
                 self._schema.context.update(context)
                 # Respect only and exclude passed from parent and re-initialize fields
                 set_class = self._schema.set_class
@@ -664,9 +664,7 @@ class List(Field):
 
     default_error_messages = {"invalid": "Not a valid list."}
 
-    def __init__(
-        self, cls_or_instance: typing.Union[Field, typing.Type[Field]], **kwargs
-    ):
+    def __init__(self, cls_or_instance: typing.Union[Field, type], **kwargs):
         super().__init__(**kwargs)
         try:
             self.inner = resolve_field_instance(cls_or_instance)
@@ -853,10 +851,14 @@ class UUID(String):
         return self._validated(value)
 
 
-class _BaseNumber(Field):
-    """Base implementation for all number classes. Users should not use this class directly.
-    This class is considered private.
+class Number(Field):
+    """Base class for number fields.
+
+    :param bool as_string: If `True`, format the serialized value as a string.
+    :param kwargs: The same keyword arguments that :class:`Field` receives.
     """
+
+    num_type = float  # type: typing.Type
 
     default_error_messages = {
         "invalid": "Not a valid number.",
@@ -866,10 +868,6 @@ class _BaseNumber(Field):
     def __init__(self, *, as_string=False, **kwargs):
         self.as_string = as_string
         super().__init__(**kwargs)
-
-    @property
-    def num_type(self):
-        raise NotImplementedError
 
     def _format_num(self, value) -> _T:
         """Return the number value for value, given this field's `num_type`."""
@@ -905,17 +903,7 @@ class _BaseNumber(Field):
         return self._validated(value)
 
 
-class Number(_BaseNumber):
-    """Base class for number fields.
-
-    :param bool as_string: If `True`, format the serialized value as a string.
-    :param kwargs: The same keyword arguments that :class:`Field` receives.
-    """
-
-    num_type = float
-
-
-class Integer(_BaseNumber):
+class Integer(Number):
     """An integer field.
 
     :param strict: If `True`, only integer types are valid.
@@ -967,7 +955,7 @@ class Float(Number):
         return num
 
 
-class Decimal(_BaseNumber):
+class Decimal(Number):
     """A field that (de)serializes to the Python ``decimal.Decimal`` type.
     It's safe to use when dealing with money values, percentages, ratios
     or other numbers where precision is critical.
@@ -1437,8 +1425,8 @@ class Mapping(Field):
 
     def __init__(
         self,
-        keys: typing.Union[Field, typing.Type[Field]] = None,
-        values: typing.Union[Field, typing.Type[Field]] = None,
+        keys: typing.Union[Field, type] = None,
+        values: typing.Union[Field, type] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1583,7 +1571,7 @@ class Url(String):
         self,
         *,
         relative: bool = False,
-        schemes: typing.Union[typing.Sequence, typing.Set] = None,
+        schemes: types.StrSequenceOrSet = None,
         require_tld: bool = True,
         **kwargs
     ):

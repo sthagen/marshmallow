@@ -1,12 +1,17 @@
 Changelog
 ---------
 
-3.3.0 (unreleased)
+3.2.2 (2019-11-04)
 ******************
+
+Bug fixes:
+
+- Don't load fields for which ``load_only`` and ``dump_only`` are both ``True`` (:pr:`1448`). 
+- Fix types in ``marshmallow.validate`` (:pr:`1446`).
 
 Support:
 
-- Test against Python 3.8 (pr:`1431`).
+- Test against Python 3.8 (:pr:`1431`).
 
 3.2.1 (2019-09-30)
 ++++++++++++++++++

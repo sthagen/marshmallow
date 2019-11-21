@@ -969,12 +969,9 @@ class Schema(base.SchemaABC, metaclass=SchemaMeta):
 
         load_fields, dump_fields = self.dict_class(), self.dict_class()
         for field_name, field_obj in fields_dict.items():
-            if field_obj.load_only:
+            if not field_obj.dump_only:
                 load_fields[field_name] = field_obj
-            elif field_obj.dump_only:
-                dump_fields[field_name] = field_obj
-            else:
-                load_fields[field_name] = field_obj
+            if not field_obj.load_only:
                 dump_fields[field_name] = field_obj
 
         dump_data_keys = [
@@ -1196,12 +1193,7 @@ class Schema(base.SchemaABC, metaclass=SchemaMeta):
             processor_kwargs = processor.__marshmallow_hook__[key]
             pass_original = processor_kwargs.get("pass_original", False)
 
-            if pass_many:
-                if pass_original:
-                    data = processor(data, original_data, many=many, **kwargs)
-                else:
-                    data = processor(data, many=many, **kwargs)
-            elif many:
+            if many and not pass_many:
                 if pass_original:
                     data = [
                         processor(item, original, many=many, **kwargs)

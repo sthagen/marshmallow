@@ -1,12 +1,68 @@
 Changelog
 ---------
 
+3.3.0 (2019-12-05)
+******************
+
+Features:
+
+- ``fields.Nested`` may take a callable that returns a schema instance.
+  Use this to resolve order-of-declaration issues when schemas nest each other (:issue:`1146`).
+
+.. code-block:: python
+
+    # <3.3
+    class AlbumSchema(Schema):
+        title = fields.Str()
+        artist = fields.Nested("ArtistSchema", only=("name",))
+
+
+    class ArtistSchema(Schema):
+        name = fields.Str()
+        albums = fields.List(fields.Nested(AlbumSchema))
+
+
+    # >=3.3
+    class AlbumSchema(Schema):
+        title = fields.Str()
+        artist = fields.Nested(lambda: ArtistSchema(only=("name",)))
+
+
+    class ArtistSchema(Schema):
+        name = fields.Str()
+        albums = fields.List(fields.Nested(AlbumSchema))
+
+Deprecations:
+
+- Passing the string ``"self"`` to ``fields.Nested`` is deprecated.
+  Use a callable instead.
+
+.. code-block:: python
+
+    from marshmallow import Schema, fields
+
+    # <3.3
+    class PersonSchema(Schema):
+        partner = fields.Nested("self", exclude=("partner",))
+        friends = fields.List(fields.Nested("self"))
+
+
+    # >=3.3
+    class PersonSchema(Schema):
+        partner = fields.Nested(lambda: PersonSchema(exclude=("partner")))
+        friends = fields.List(fields.Nested(lambda: PersonSchema()))
+
+Other changes:
+
+- Fix typing for ``Number._format_num`` (:pr:`1466`). Thanks :user:`hukkinj1`.
+- Make mypy stricter and remove dead code (:pr:`1467`). Thanks again, :user:`hukkinj1`.
+
 3.2.2 (2019-11-04)
 ******************
 
 Bug fixes:
 
-- Don't load fields for which ``load_only`` and ``dump_only`` are both ``True`` (:pr:`1448`). 
+- Don't load fields for which ``load_only`` and ``dump_only`` are both ``True`` (:pr:`1448`).
 - Fix types in ``marshmallow.validate`` (:pr:`1446`).
 
 Support:
